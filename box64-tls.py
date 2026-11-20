@@ -1,39 +1,41 @@
 from pathlib import Path
+import sys
 
-path = Path("/tmp/box64/src/elfs/elfloader.c")
-text = path.read_text()
-marker = "Fail to read PT_TLS part #%zu (size=%zd)\\n"
-at = text.find("Fail to read PT_TLS")
-if at < 0:
-    raise SystemExit("ponto do TLS nao encontrado")
-start = text.rfind("if(e->p_filesz)", 0, at)
-end = text.find("\n", text.find("return 1;", at))
-if start < 0 or end < 0:
-    raise SystemExit("bloco do TLS incompleto")
-end = text.find("\n", end) + 1
-# include the closing brace of if(e->p_filesz)
-brace = text.find("}", end)
-end = text.find("\n", brace) + 1
-replacement = """if(e->p_filesz) {
-            if(fseeko(head->file, e->p_offset, SEEK_SET)!=0 || fread(dest, e->p_filesz, 1, head->file)!=1) {
-                off_t tls_off = -1;
-                for(size_t j = 0; j < head->numPHEntries; ++j) {
-                    Elf64_Phdr *load = &head->PHEntries._64[j];
-                    if(load->p_type==PT_LOAD && load->p_filesz
-                        && load->p_vaddr <= e->p_vaddr
-                        && e->p_vaddr + e->p_filesz <= load->p_vaddr + load->p_filesz) {
-                        tls_off = (off_t)(load->p_offset + (e->p_vaddr - load->p_vaddr));
-                        break;
-                    }
-                }
-                if(tls_off < 0 || fseeko(head->file, tls_off, SEEK_SET)!=0 || fread(dest, e->p_filesz, 1, head->file)!=1) {
+path = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/box64/src/elfs/elfloader.c")
+text = path.read_text(encoding="utf-8")
+old = """            if(e->p_filesz) {
+                fseeko(head->file, e->p_offset, SEEK_SET);
+                if(fread(dest, e->p_filesz, 1, head->file)!=1) {
                     mutex_unlock(&context->mutex_tls);
                     printf_log(LOG_NONE, "Fail to read PT_TLS part #%zu (size=%zd)\\n", i, e->p_filesz);
                     return 1;
                 }
             }
-        }
 """
-text = text[:start] + replacement + text[end:]
-path.write_text(text)
+new = """            if(e->p_filesz) {
+                int tls_ok = (fseeko(head->file, e->p_offset, SEEK_SET)==0 && fread(dest, e->p_filesz, 1, head->file)==1);
+                if(!tls_ok) {
+                    off_t tls_off = -1;
+                    for(size_t j = 0; j < head->numPHEntries; ++j) {
+                        Elf64_Phdr *load = &head->PHEntries._64[j];
+                        if(load->p_type==PT_LOAD && load->p_filesz
+                            && load->p_vaddr <= e->p_vaddr
+                            && e->p_vaddr + e->p_filesz <= load->p_vaddr + load->p_filesz) {
+                            tls_off = (off_t)(load->p_offset + (e->p_vaddr - load->p_vaddr));
+                            break;
+                        }
+                    }
+                    tls_ok = (tls_off >= 0 && fseeko(head->file, tls_off, SEEK_SET)==0 && fread(dest, e->p_filesz, 1, head->file)==1);
+                }
+                if(!tls_ok) {
+                    mutex_unlock(&context->mutex_tls);
+                    printf_log(LOG_NONE, "Fail to read PT_TLS part #%zu (size=%zd)\\n", i, e->p_filesz);
+                    return 1;
+                }
+            }
+"""
+count = text.count(old)
+if count != 1:
+    raise SystemExit(f"trecho do TLS encontrado {count} vezes")
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
 print("box64 TLS fallback aplicado")
