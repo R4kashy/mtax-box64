@@ -3,7 +3,7 @@
 # Os nomes que o Debian trocou: libicu72 -> libicu76, libzip4 -> libzip5, libfontconfig -> libfontconfig1.
 FROM --platform=linux/arm64 debian:trixie-slim
 
-LABEL author="Rakashy" maintainer="r4kashy"
+LABEL author="r4kashy" maintainer="r4kashy"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
@@ -40,7 +40,6 @@ RUN apt-get update \
     ffmpeg \
     gnupg2 \
     apt-transport-https \
-    software-properties-common \
     ca-certificates \
     libz3-dev \
     rapidjson-dev \
