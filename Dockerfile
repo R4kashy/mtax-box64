@@ -50,6 +50,7 @@ RUN apt-get update \
     libsdl2-image-2.0-0 \
     build-essential \
     cmake \
+    python3 \
     libgdiplus \
     libstdc++6 \
  && sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
@@ -67,6 +68,14 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends libncursesw6:amd64 libtinfo6:amd64 \
  && rm -rf /var/lib/apt/lists/*
+
+COPY box64-tls.py /tmp/box64-tls.py
+RUN git clone --depth 1 https://github.com/ptitSeb/box64.git /tmp/box64 \
+ && python3 /tmp/box64-tls.py \
+ && cmake -S /tmp/box64 -B /tmp/box64/build -DARM_DYNAREC=ON -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build /tmp/box64/build -j"$(nproc)" \
+ && cmake --install /tmp/box64/build \
+ && rm -rf /tmp/box64 /tmp/box64-tls.py
 
 COPY entrypoint.sh /entrypoint.sh
 
